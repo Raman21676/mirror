@@ -10,6 +10,14 @@ pub struct CryptoSession {
 }
 
 impl CryptoSession {
+    /// Create a new crypto session from a raw 32-byte symmetric key
+    pub fn from_raw_key(key: &[u8; 32]) -> Self {
+        Self {
+            encryption_key: *key,
+            decryption_key: *key,
+        }
+    }
+
     /// Create a new crypto session from a shared secret
     pub fn from_shared_secret(secret: &[u8]) -> Result<Self, CryptoError> {
         debug!("Creating crypto session from shared secret");

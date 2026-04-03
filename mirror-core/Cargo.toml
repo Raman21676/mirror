@@ -21,9 +21,6 @@ android_logger = "0.14"
 ring = "0.17"
 rand = "0.8"
 
-# Audio codec - Opus
-opus = { version = "0.3", optional = true }
-
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -32,16 +29,8 @@ serde_json = "1.0"
 thiserror = "1.0"
 anyhow = "1.0"
 
-# Async runtime (if needed for networking)
-tokio = { version = "1.35", features = ["rt", "sync"], optional = true }
-
 # Time
 chrono = "0.4"
-
-[features]
-default = []
-audio-opus = ["opus"]
-async = ["tokio"]
 
 [profile.release]
 opt-level = 3
