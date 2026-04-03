@@ -15,7 +15,6 @@ import com.mirror.target.MainActivity
 import com.mirror.target.R
 import com.mirror.target.audio.AudioCaptureManager
 import com.mirror.target.camera.CameraCaptureManager
-import com.mirror.target.location.LocationTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,7 +38,6 @@ class MirrorTargetService : Service() {
     private lateinit var wakeLock: PowerManager.WakeLock
     private lateinit var cameraManager: CameraCaptureManager
     private lateinit var audioManager: AudioCaptureManager
-    private lateinit var locationTracker: LocationTracker
 
     override fun onCreate() {
         super.onCreate()
@@ -51,7 +49,6 @@ class MirrorTargetService : Service() {
         
         cameraManager = CameraCaptureManager(this)
         audioManager = AudioCaptureManager(this)
-        locationTracker = LocationTracker(this, serviceScope)
         createNotificationChannel()
     }
 
@@ -73,7 +70,6 @@ class MirrorTargetService : Service() {
         try {
             cameraManager.startCapture()
             audioManager.startCapture()
-            locationTracker.startTracking()
             isRunning = true
             Timber.i("Service started")
         } catch (e: Exception) {
@@ -89,7 +85,6 @@ class MirrorTargetService : Service() {
         isRunning = false
         cameraManager.stopCapture()
         audioManager.stopCapture()
-        locationTracker.stopTracking()
         if (wakeLock.isHeld) wakeLock.release()
         serviceScope.cancel()
     }

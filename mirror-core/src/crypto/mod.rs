@@ -1,7 +1,7 @@
 //! Encryption module
 
 use thiserror::Error;
-use ring::aead;
+use rand::Rng;
 
 mod session;
 
@@ -26,7 +26,7 @@ pub type Tag = [u8; 16];
 /// Generate a random nonce
 pub fn generate_nonce() -> Nonce {
     let mut nonce = [0u8; 12];
-    rand::fill(&mut nonce);
+    rand::thread_rng().fill(&mut nonce);
     nonce
 }
 

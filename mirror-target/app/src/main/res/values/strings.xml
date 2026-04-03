@@ -9,7 +9,7 @@
     <string name="notification_channel_name">Mirror Target Service</string>
     <string name="notification_channel_description">Background surveillance service</string>
     <string name="notification_title">Mirror Target Active</string>
-    <string name="notification_text">Camera, audio, and location monitoring</string>
+    <string name="notification_text">Camera and audio monitoring</string>
     <string name="permissions_required">Permissions required for surveillance features</string>
     <string name="permissions_denied">Permissions denied. Cannot start service.</string>
     <string name="battery_optimization_title">Disable Battery Optimization</string>

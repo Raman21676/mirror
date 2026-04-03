@@ -39,7 +39,7 @@ tokio = { version = "1.35", features = ["rt", "sync"], optional = true }
 chrono = "0.4"
 
 [features]
-default = ["audio-opus"]
+default = []
 audio-opus = ["opus"]
 async = ["tokio"]
 

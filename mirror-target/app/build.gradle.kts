@@ -20,11 +20,6 @@ android {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
         
-        externalNativeBuild {
-            cmake {
-                cppFlags += "-std=c++17"
-            }
-        }
     }
 
     buildTypes {
@@ -54,13 +49,6 @@ android {
         viewBinding = true
     }
     
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
-    
     ndkVersion = "25.2.9519653"
 }
 
@@ -71,9 +59,6 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.lifecycle:lifecycle-service:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    
-    // Google Play Services - Location
-    implementation("com.google.android.gms:play-services-location:21.1.0")
     
     // WebRTC
     implementation("org.webrtc:google-webrtc:1.0.32006")

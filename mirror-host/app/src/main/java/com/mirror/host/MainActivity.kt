@@ -2,13 +2,14 @@ package com.mirror.host
 
 import android.content.Intent
 import android.os.Bundle
-import com.google.android.material.bottomnavigation.BottomNavigationView
 import androidx.appcompat.app.AppCompatActivity
-import androidx.navigation.findNavController
-import androidx.navigation.ui.AppBarConfiguration
-import androidx.navigation.ui.setupActionBarWithNavController
-import androidx.navigation.ui.setupWithNavController
+import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.mirror.host.databinding.ActivityMainBinding
+import com.mirror.host.audio.AudioMonitorActivity
+import com.mirror.host.gallery.GalleryBrowserActivity
+import com.mirror.host.live.LiveCameraActivity
+import com.mirror.host.map.MapTrackerActivity
+import com.mirror.host.pairing.DevicePairingActivity
 import timber.log.Timber
 
 /**
@@ -21,7 +22,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         if (BuildConfig.DEBUG) {
             Timber.plant(Timber.DebugTree())
         }
@@ -31,17 +32,30 @@ class MainActivity : AppCompatActivity() {
 
         val navView: BottomNavigationView = binding.navView
 
-        val navController = findNavController(R.id.nav_host_fragment_activity_main)
-        val appBarConfiguration = AppBarConfiguration(
-            setOf(
-                R.id.navigation_devices,
-                R.id.navigation_live,
-                R.id.navigation_map,
-                R.id.navigation_gallery,
-                R.id.navigation_settings
-            )
-        )
-        setupActionBarWithNavController(navController, appBarConfiguration)
-        navView.setupWithNavController(navController)
+        navView.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.navigation_devices -> {
+                    startActivity(Intent(this, DevicePairingActivity::class.java))
+                    true
+                }
+                R.id.navigation_live -> {
+                    startActivity(Intent(this, LiveCameraActivity::class.java))
+                    true
+                }
+                R.id.navigation_map -> {
+                    startActivity(Intent(this, MapTrackerActivity::class.java))
+                    true
+                }
+                R.id.navigation_gallery -> {
+                    startActivity(Intent(this, GalleryBrowserActivity::class.java))
+                    true
+                }
+                R.id.navigation_settings -> {
+                    // TODO: Create SettingsActivity later
+                    true
+                }
+                else -> false
+            }
+        }
     }
 }

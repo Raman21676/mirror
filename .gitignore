@@ -2,7 +2,7 @@
 *.md
 
 # Rust build artifacts
-/target/
+**/target/
 Cargo.lock
 
 # Android build artifacts

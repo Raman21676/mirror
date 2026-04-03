@@ -1,5 +1,5 @@
 use super::{CryptoError, EncryptedPacket, Nonce, Tag};
-use ring::aead::{self, Aes256Gcm, Nonce as RingNonce, UnboundKey, AES_256_GCM};
+use ring::aead::{self, Nonce as RingNonce, UnboundKey, AES_256_GCM};
 use ring::hkdf;
 use log::debug;
 
