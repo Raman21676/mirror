@@ -1,0 +1,15 @@
+package com.mirror.host
+
+import android.app.Application
+import timber.log.Timber
+
+class MirrorHostApplication : Application() {
+    
+    override fun onCreate() {
+        super.onCreate()
+        
+        if (BuildConfig.DEBUG) {
+            Timber.plant(Timber.DebugTree())
+        }
+    }
+}

@@ -1,0 +1,9 @@
+<resources>
+    <style name="Theme.MirrorHost" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/mirror_primary</item>
+        <item name="colorPrimaryDark">@color/mirror_primary_dark</item>
+        <item name="colorAccent">@color/mirror_accent</item>
+        <item name="android:colorBackground">@color/mirror_background</item>
+        <item name="colorSurface">@color/mirror_surface</item>
+    </style>
+</resources>

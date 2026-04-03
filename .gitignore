@@ -1,0 +1,27 @@
+# Documentation / Planning files (unimportant for source backup)
+*.md
+
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# Android build artifacts
+/build/
+.gradle/
+local.properties
+*.iml
+.idea/
+.vscode/
+*.apk
+*.aab
+
+# NDK / CMake
+.cxx/
+externalNativeBuild/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

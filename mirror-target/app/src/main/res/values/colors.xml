@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="mirror_primary">#FF6B35</color>
+    <color name="mirror_primary_dark">#E55A2B</color>
+    <color name="mirror_accent">#00BCD4</color>
+    <color name="mirror_background">#121212</color>
+    <color name="mirror_surface">#1E1E1E</color>
+    <color name="mirror_error">#CF6679</color>
+</resources>
