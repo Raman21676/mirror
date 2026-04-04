@@ -1,5 +1,5 @@
 # Documentation / Planning files (unimportant for source backup)
-*.md
+# *.md  # Temporarily commented to track TODO updates
 
 # Rust build artifacts
 /target/
