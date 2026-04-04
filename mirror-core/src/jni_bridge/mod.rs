@@ -150,7 +150,12 @@ pub extern "C" fn Java_com_mirror_core_RustBridge_nativeDemuxPacket(
 
     let mut packets = Vec::new();
     while let Ok(Some(packet)) = demux.demux() {
-        packets.push(packet.payload);
+        // Prepend type byte to payload so Host can route video vs audio
+        // Format: [type (1 byte)][payload (N bytes)]
+        let mut packet_with_type = Vec::with_capacity(1 + packet.payload.len());
+        packet_with_type.push(packet.stream_type as u8);
+        packet_with_type.extend_from_slice(&packet.payload);
+        packets.push(packet_with_type);
     }
 
     let byte_array_class = env.find_class("[B").expect("Failed to find byte[] class");

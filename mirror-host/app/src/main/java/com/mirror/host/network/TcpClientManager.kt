@@ -134,14 +134,25 @@ class TcpClientManager(
 
     private fun processReceivedData(data: ByteArray) {
         // Pass through Rust demux and extract payloads
+        // Format: [type (1 byte)][payload (N bytes)]
         try {
             val payloads = RustBridge.nativeDemuxPacket(data)
             if (payloads != null && payloads.isNotEmpty()) {
                 Timber.d("Demuxed ${payloads.size} payload(s)")
-                payloads.forEachIndexed { index, payload ->
-                    Timber.d("  Payload $index: ${payload.size} bytes")
-                    // Pass video frames to the callback
-                    onFrameReceived?.invoke(payload)
+                payloads.forEachIndexed { index, payloadWithType ->
+                    if (payloadWithType.size < 1) return@forEachIndexed
+                    
+                    val type = payloadWithType[0].toInt() and 0xFF
+                    val payload = payloadWithType.copyOfRange(1, payloadWithType.size)
+                    
+                    Timber.d("  Payload $index: type=0x${type.toString(16)}, ${payload.size} bytes")
+                    
+                    // Route based on type: 0x01 = Video, 0x02 = Audio
+                    when (type) {
+                        0x01 -> onFrameReceived?.invoke(payload)   // Video
+                        0x02 -> onAudioReceived?.invoke(payload)  // Audio
+                        else -> Timber.w("Unknown payload type: 0x${type.toString(16)}")
+                    }
                 }
             } else {
                 Timber.d("No complete payloads yet (buffered ${data.size} bytes)")
