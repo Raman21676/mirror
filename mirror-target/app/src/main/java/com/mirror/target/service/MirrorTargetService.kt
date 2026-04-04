@@ -15,6 +15,8 @@ import com.mirror.target.MainActivity
 import com.mirror.target.R
 import com.mirror.target.audio.AudioCaptureManager
 import com.mirror.target.camera.CameraCaptureManager
+import com.mirror.target.core.RustBridge
+import com.mirror.target.encoder.MediaCodecEncoder
 import com.mirror.target.network.TcpServerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +42,7 @@ class MirrorTargetService : Service() {
     private lateinit var cameraManager: CameraCaptureManager
     private lateinit var audioManager: AudioCaptureManager
     private lateinit var tcpServer: TcpServerManager
+    private lateinit var videoEncoder: MediaCodecEncoder
 
     override fun onCreate() {
         super.onCreate()
@@ -52,6 +55,33 @@ class MirrorTargetService : Service() {
         cameraManager = CameraCaptureManager(this)
         audioManager = AudioCaptureManager(this)
         tcpServer = TcpServerManager(serviceScope)
+        videoEncoder = MediaCodecEncoder(
+            width = CameraCaptureManager.WIDTH,
+            height = CameraCaptureManager.HEIGHT,
+            bitrate = 1_000_000,
+            fps = 15
+        )
+        
+        // Wire camera -> encoder
+        cameraManager.onFrameAvailable = { nv21Frame ->
+            videoEncoder.encodeFrame(nv21Frame)
+        }
+        
+        // Wire encoder -> mux -> TCP
+        videoEncoder.onEncodedFrame = { encodedFrame ->
+            // Mux the encoded frame (type 0x01 = Video)
+            val muxed = RustBridge.nativeMuxPacket(0x01, encodedFrame)
+            if (muxed != null) {
+                // Send to connected client (skip encryption for Task 4)
+                val sent = tcpServer.sendToClient(muxed)
+                if (sent) {
+                    Timber.v("Sent ${muxed.size} bytes (${encodedFrame.size} encoded)")
+                }
+            } else {
+                Timber.w("Mux failed for ${encodedFrame.size} byte frame")
+            }
+        }
+        
         createNotificationChannel()
     }
 
@@ -71,11 +101,17 @@ class MirrorTargetService : Service() {
         startForeground(NOTIFICATION_ID, createNotification())
         
         try {
-            cameraManager.startCapture()
-            audioManager.startCapture()
+            // Start encoder first (before camera starts feeding it)
+            videoEncoder.start()
+            // Start TCP server
             tcpServer.startServer()
+            // Start camera (will feed encoder)
+            cameraManager.startCapture()
+            // Start audio (not wired yet, but keep it running)
+            audioManager.startCapture()
+            
             isRunning = true
-            Timber.i("Service started")
+            Timber.i("Service started - camera streaming to TCP")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start")
             stopSelf()
@@ -89,9 +125,11 @@ class MirrorTargetService : Service() {
         isRunning = false
         cameraManager.stopCapture()
         audioManager.stopCapture()
+        videoEncoder.stop()
         tcpServer.stopServer()
         if (wakeLock.isHeld) wakeLock.release()
         serviceScope.cancel()
+        Timber.i("Service stopped")
     }
 
     private fun createNotificationChannel() {
@@ -112,7 +150,7 @@ class MirrorTargetService : Service() {
         )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Mirror Target")
-            .setContentText("Surveillance active")
+            .setContentText("Camera streaming active")
             .setSmallIcon(android.R.drawable.ic_menu_camera)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
