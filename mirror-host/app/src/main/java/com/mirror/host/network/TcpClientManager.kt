@@ -8,6 +8,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import timber.log.Timber
+import java.io.EOFException
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -15,13 +16,13 @@ import java.net.Socket
 /**
  * TCP client to connect to Target app's server.
  * Connects to port 8080 on the Target device's IP.
+ * Protocol: [4-byte length (big-endian)][data]
  */
 class TcpClientManager(
     private val scope: CoroutineScope
 ) {
     companion object {
         const val PORT = 8080
-        const val BUFFER_SIZE = 8192
         const val RECONNECT_DELAY_MS = 3000L
     }
 
@@ -52,7 +53,7 @@ class TcpClientManager(
                     onConnectionStateChanged?.invoke(true)
                     Timber.i("Connected to Target at $targetIp:$PORT")
 
-                    // Start receiving data
+                    // Start receiving length-prefixed frames
                     receiveLoop()
 
                 } catch (e: IOException) {
@@ -79,25 +80,56 @@ class TcpClientManager(
         
         try {
             val input = sock.getInputStream()
-            val buffer = ByteArray(BUFFER_SIZE)
+            val lengthBuffer = ByteArray(4)
 
             while (isActive && sock.isConnected && !sock.isClosed) {
-                val bytesRead = input.read(buffer)
-                if (bytesRead == -1) {
-                    Timber.i("Server closed connection")
+                // Read 4-byte length header
+                if (!readFully(input, lengthBuffer)) {
+                    Timber.i("Connection closed while reading length")
                     break
                 }
-                if (bytesRead > 0) {
-                    val data = buffer.copyOf(bytesRead)
-                    processReceivedData(data)
-                    onDataReceived?.invoke(data)
+                
+                // Parse length (big-endian)
+                val length = ((lengthBuffer[0].toInt() and 0xFF) shl 24) or
+                             ((lengthBuffer[1].toInt() and 0xFF) shl 16) or
+                             ((lengthBuffer[2].toInt() and 0xFF) shl 8) or
+                             (lengthBuffer[3].toInt() and 0xFF)
+                
+                if (length < 0 || length > 10_000_000) { // Sanity check: max 10MB
+                    Timber.e("Invalid packet length: $length")
+                    break
                 }
+                
+                // Read exactly 'length' bytes
+                val dataBuffer = ByteArray(length)
+                if (!readFully(input, dataBuffer)) {
+                    Timber.i("Connection closed while reading data")
+                    break
+                }
+                
+                // Process the complete packet
+                processReceivedData(dataBuffer)
+                onDataReceived?.invoke(dataBuffer)
             }
         } catch (e: IOException) {
             if (isActive) Timber.e(e, "Receive error")
         } finally {
             cleanupConnection()
         }
+    }
+    
+    /**
+     * Read exactly 'buffer.size' bytes from input stream.
+     * Returns false if stream ends before buffer is filled.
+     */
+    private fun readFully(input: java.io.InputStream, buffer: ByteArray): Boolean {
+        var offset = 0
+        while (offset < buffer.size) {
+            val bytesRead = input.read(buffer, offset, buffer.size - offset)
+            if (bytesRead == -1) return false
+            offset += bytesRead
+        }
+        return true
     }
 
     private fun processReceivedData(data: ByteArray) {

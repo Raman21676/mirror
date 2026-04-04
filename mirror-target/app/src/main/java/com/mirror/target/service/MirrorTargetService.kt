@@ -68,17 +68,33 @@ class MirrorTargetService : Service() {
         }
         
         // Wire encoder -> mux -> TCP
-        videoEncoder.onEncodedFrame = { encodedFrame ->
+        videoEncoder.onEncodedFrame = { encodedFrame, isCodecConfig ->
             // Mux the encoded frame (type 0x01 = Video)
             val muxed = RustBridge.nativeMuxPacket(0x01, encodedFrame)
             if (muxed != null) {
-                // Send to connected client (skip encryption for Task 4)
+                // Send to connected client (skip encryption for now)
                 val sent = tcpServer.sendToClient(muxed)
                 if (sent) {
-                    Timber.v("Sent ${muxed.size} bytes (${encodedFrame.size} encoded)")
+                    if (isCodecConfig) {
+                        Timber.i("Sent codec config: ${muxed.size} bytes")
+                    } else {
+                        Timber.v("Sent video frame: ${muxed.size} bytes")
+                    }
                 }
             } else {
                 Timber.w("Mux failed for ${encodedFrame.size} byte frame")
+            }
+        }
+        
+        // When a new client connects, send codec config first
+        tcpServer.onClientConnected = {
+            val codecConfig = videoEncoder.codecConfig
+            if (codecConfig != null) {
+                Timber.i("New client connected, sending codec config first")
+                val muxed = RustBridge.nativeMuxPacket(0x01, codecConfig)
+                if (muxed != null) {
+                    tcpServer.sendToClient(muxed)
+                }
             }
         }
         

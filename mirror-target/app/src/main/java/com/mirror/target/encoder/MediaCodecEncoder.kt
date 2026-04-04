@@ -18,8 +18,13 @@ class MediaCodecEncoder(
     private var encoder: MediaCodec? = null
     private var isEncoding = false
     private var presentationTimeUs = 0L
+    
+    // SPS/PPS codec config (must be sent before any video frames)
+    @Volatile
+    var codecConfig: ByteArray? = null
+        private set
 
-    var onEncodedFrame: ((ByteArray) -> Unit)? = null
+    var onEncodedFrame: ((ByteArray, Boolean) -> Unit)? = null
 
     fun start() {
         if (isEncoding) return
@@ -37,6 +42,7 @@ class MediaCodecEncoder(
             }
             isEncoding = true
             presentationTimeUs = 0L
+            codecConfig = null // Reset codec config on restart
             startOutputThread()
             Timber.i("H.264 encoder started: ${width}x${height} @ ${bitrate / 1000}kbps, ${fps}fps")
         } catch (e: Exception) {
@@ -50,6 +56,7 @@ class MediaCodecEncoder(
             encoder?.stop()
             encoder?.release()
             encoder = null
+            codecConfig = null
             Timber.i("H.264 encoder stopped")
         } catch (e: Exception) {
             Timber.e(e, "Error stopping encoder")
@@ -108,9 +115,18 @@ class MediaCodecEncoder(
 
                             encoder?.releaseOutputBuffer(outputBufferId, false)
 
-                            // Notify callback with encoded frame
                             if (chunk.isNotEmpty()) {
-                                onEncodedFrame?.invoke(chunk)
+                                // Check if this is codec config (SPS/PPS)
+                                val isCodecConfig = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0
+                                
+                                if (isCodecConfig) {
+                                    // Store codec config for new clients
+                                    codecConfig = chunk
+                                    Timber.i("Stored codec config: ${chunk.size} bytes")
+                                }
+                                
+                                // Notify callback with encoded frame
+                                onEncodedFrame?.invoke(chunk, isCodecConfig)
                             }
                         }
                         outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {

@@ -27,6 +27,8 @@ class TcpServerManager(
     private var clientSocket: Socket? = null
     private var serverJob: Job? = null
     private val ioScope = CoroutineScope(Dispatchers.IO + scope.coroutineContext)
+    
+    var onClientConnected: (() -> Unit)? = null
 
     fun startServer() {
         if (serverJob != null) return
@@ -72,6 +74,9 @@ class TcpServerManager(
         // Close previous client if any (only one client at a time)
         clientSocket?.close()
         clientSocket = socket
+        
+        // Notify that a new client connected (send codec config)
+        onClientConnected?.invoke()
 
         ioScope.launch {
             try {
@@ -118,13 +123,25 @@ class TcpServerManager(
     }
 
     /**
-     * Send data to the connected client (for future use)
+     * Send data to the connected client with 4-byte length header.
+     * Format: [length (4 bytes, big-endian)][data]
      */
     fun sendToClient(data: ByteArray): Boolean {
         val socket = clientSocket ?: return false
         return try {
-            socket.getOutputStream().write(data)
-            socket.getOutputStream().flush()
+            val output = socket.getOutputStream()
+            
+            // Write 4-byte big-endian length header
+            val lengthHeader = ByteArray(4).apply {
+                this[0] = (data.size shr 24).toByte()
+                this[1] = (data.size shr 16).toByte()
+                this[2] = (data.size shr 8).toByte()
+                this[3] = data.size.toByte()
+            }
+            
+            output.write(lengthHeader)
+            output.write(data)
+            output.flush()
             true
         } catch (e: IOException) {
             Timber.e(e, "Failed to send to client")

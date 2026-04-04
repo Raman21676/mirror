@@ -117,8 +117,17 @@ class MainActivity : AppCompatActivity() {
                     true
                 }
                 R.id.navigation_live -> {
-                    startActivity(Intent(this, LiveCameraActivity::class.java))
-                    true
+                    val ip = binding.ipInput.text?.toString()?.trim() ?: ""
+                    if (ip.isEmpty()) {
+                        Toast.makeText(this, "Please enter Target IP first", Toast.LENGTH_SHORT).show()
+                        false
+                    } else {
+                        val intent = Intent(this, LiveCameraActivity::class.java).apply {
+                            putExtra(LiveCameraActivity.EXTRA_TARGET_IP, ip)
+                        }
+                        startActivity(intent)
+                        true
+                    }
                 }
                 R.id.navigation_map -> {
                     startActivity(Intent(this, MapTrackerActivity::class.java))

@@ -16,6 +16,7 @@ class MediaCodecDecoder(
 ) {
     private var decoder: MediaCodec? = null
     private var isDecoding = false
+    private var frameCount = 0
 
     fun start() {
         if (isDecoding) return
@@ -30,7 +31,7 @@ class MediaCodecDecoder(
                 start()
             }
             isDecoding = true
-            startInputThread()
+            frameCount = 0
             startOutputThread()
             Timber.i("H.264 decoder started: ${width}x${height}")
         } catch (e: Exception) {
@@ -44,7 +45,7 @@ class MediaCodecDecoder(
             decoder?.stop()
             decoder?.release()
             decoder = null
-            Timber.i("H.264 decoder stopped")
+            Timber.i("H.264 decoder stopped (rendered $frameCount frames)")
         } catch (e: Exception) {
             Timber.e(e, "Error stopping decoder")
         }
@@ -52,6 +53,7 @@ class MediaCodecDecoder(
 
     /**
      * Feed an encoded H.264 frame to the decoder.
+     * Automatically detects codec config (SPS/PPS) vs regular frames.
      */
     fun decodeFrame(encodedData: ByteArray) {
         if (!isDecoding || encodedData.isEmpty()) return
@@ -59,17 +61,25 @@ class MediaCodecDecoder(
         val codec = decoder ?: return
 
         try {
+            // Check if this is codec config (contains SPS/PPS NAL units)
+            val isCodecConfig = isCodecConfigFrame(encodedData)
+            if (isCodecConfig) {
+                Timber.d("Received codec config (SPS/PPS): ${encodedData.size} bytes")
+            }
+
             val inputBufferId = codec.dequeueInputBuffer(10000)
             if (inputBufferId >= 0) {
                 val inputBuffer = codec.getInputBuffer(inputBufferId)
                 inputBuffer?.clear()
                 inputBuffer?.put(encodedData)
+                
+                val flags = if (isCodecConfig) MediaCodec.BUFFER_FLAG_CODEC_CONFIG else 0
                 codec.queueInputBuffer(
                     inputBufferId,
                     0,
                     encodedData.size,
                     System.nanoTime() / 1000, // presentation time in microseconds
-                    0
+                    flags
                 )
             }
         } catch (e: Exception) {
@@ -77,10 +87,39 @@ class MediaCodecDecoder(
         }
     }
 
-    private fun startInputThread() {
-        // Input is handled by decodeFrame() calls from main thread
-        // This method is kept for symmetry but we don't need a separate thread
-        // since we're being fed data via TCP callback
+    /**
+     * Check if this is a codec config frame (contains SPS/PPS).
+     * H.264 NAL unit types: 7 = SPS, 8 = PPS
+     */
+    private fun isCodecConfigFrame(data: ByteArray): Boolean {
+        if (data.size < 5) return false
+        
+        // Check for AnnexB format start code (0x00 0x00 0x00 0x01 or 0x00 0x00 0x01)
+        var offset = 0
+        while (offset < data.size - 4) {
+            // Check for 4-byte start code
+            if (data[offset] == 0x00.toByte() && data[offset + 1] == 0x00.toByte() && 
+                data[offset + 2] == 0x00.toByte() && data[offset + 3] == 0x01.toByte()) {
+                // NAL unit type is in the lower 5 bits of the first byte after start code
+                val nalUnitType = (data[offset + 4].toInt() and 0x1F)
+                if (nalUnitType == 7 || nalUnitType == 8) {
+                    return true // Contains SPS (7) or PPS (8)
+                }
+                offset += 4
+            } 
+            // Check for 3-byte start code
+            else if (data[offset] == 0x00.toByte() && data[offset + 1] == 0x00.toByte() && 
+                     data[offset + 2] == 0x01.toByte()) {
+                val nalUnitType = (data[offset + 3].toInt() and 0x1F)
+                if (nalUnitType == 7 || nalUnitType == 8) {
+                    return true // Contains SPS (7) or PPS (8)
+                }
+                offset += 3
+            } else {
+                offset++
+            }
+        }
+        return false
     }
 
     private fun startOutputThread() {
@@ -94,6 +133,12 @@ class MediaCodecDecoder(
                         outputBufferId >= 0 -> {
                             // Render the output buffer to the surface
                             decoder?.releaseOutputBuffer(outputBufferId, true)
+                            frameCount++
+                            
+                            // Log every 30 frames (approx 2 seconds at 15fps)
+                            if (frameCount % 30 == 0) {
+                                Timber.i("Frame rendered to surface: $frameCount total frames")
+                            }
                         }
                         outputBufferId == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                             val format = decoder?.outputFormat
