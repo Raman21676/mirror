@@ -15,6 +15,7 @@ import com.mirror.target.MainActivity
 import com.mirror.target.R
 import com.mirror.target.audio.AudioCaptureManager
 import com.mirror.target.camera.CameraCaptureManager
+import com.mirror.target.network.TcpServerManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -38,6 +39,7 @@ class MirrorTargetService : Service() {
     private lateinit var wakeLock: PowerManager.WakeLock
     private lateinit var cameraManager: CameraCaptureManager
     private lateinit var audioManager: AudioCaptureManager
+    private lateinit var tcpServer: TcpServerManager
 
     override fun onCreate() {
         super.onCreate()
@@ -49,6 +51,7 @@ class MirrorTargetService : Service() {
         
         cameraManager = CameraCaptureManager(this)
         audioManager = AudioCaptureManager(this)
+        tcpServer = TcpServerManager(serviceScope)
         createNotificationChannel()
     }
 
@@ -70,6 +73,7 @@ class MirrorTargetService : Service() {
         try {
             cameraManager.startCapture()
             audioManager.startCapture()
+            tcpServer.startServer()
             isRunning = true
             Timber.i("Service started")
         } catch (e: Exception) {
@@ -85,6 +89,7 @@ class MirrorTargetService : Service() {
         isRunning = false
         cameraManager.stopCapture()
         audioManager.stopCapture()
+        tcpServer.stopServer()
         if (wakeLock.isHeld) wakeLock.release()
         serviceScope.cancel()
     }

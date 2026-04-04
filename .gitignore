@@ -2,7 +2,8 @@
 *.md
 
 # Rust build artifacts
-**/target/
+/target/
+mirror-core/target/
 Cargo.lock
 
 # Android build artifacts
