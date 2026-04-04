@@ -35,6 +35,7 @@ class TcpClientManager(
 
     var onConnectionStateChanged: ((Boolean) -> Unit)? = null
     var onDataReceived: ((ByteArray) -> Unit)? = null
+    var onFrameReceived: ((ByteArray) -> Unit)? = null  // Called with demuxed video frames
 
     fun connect(targetIp: String) {
         if (isConnected || clientJob != null) return
@@ -100,11 +101,16 @@ class TcpClientManager(
     }
 
     private fun processReceivedData(data: ByteArray) {
-        // Pass through Rust demux and log payload count
+        // Pass through Rust demux and extract payloads
         try {
             val payloads = RustBridge.nativeDemuxPacket(data)
             if (payloads != null && payloads.isNotEmpty()) {
                 Timber.d("Demuxed ${payloads.size} payload(s)")
+                payloads.forEachIndexed { index, payload ->
+                    Timber.d("  Payload $index: ${payload.size} bytes")
+                    // Pass video frames to the callback
+                    onFrameReceived?.invoke(payload)
+                }
             } else {
                 Timber.d("No complete payloads yet (buffered ${data.size} bytes)")
             }
