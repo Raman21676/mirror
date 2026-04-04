@@ -1,28 +1,21 @@
-# Documentation / Planning files (unimportant for source backup)
-# *.md  # Temporarily commented to track TODO updates
+# Build outputs
+build/
+*/build/
 
-# Rust build artifacts
-/target/
-mirror-core/target/
-Cargo.lock
-
-# Android build artifacts
-/build/
-.gradle/
+# Local properties
 local.properties
-*.iml
+secrets.properties
+
+# Gradle
+.gradle/
+
+# IDE
 .idea/
-.vscode/
-*.apk
-*.aab
+*.iml
 
-# NDK / CMake
-.cxx/
-externalNativeBuild/
-
-# OS files
+# OS
 .DS_Store
-Thumbs.db
 
-# Logs
+# Temp files
+*.tmp
 *.log

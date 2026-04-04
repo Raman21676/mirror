@@ -7,23 +7,34 @@ import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.mirror.host.audio.AudioPlayer
+import com.mirror.host.core.RustBridge
 import com.mirror.host.decoder.MediaCodecDecoder
-import com.mirror.host.network.TcpClientManager
+import com.mirror.host.network.TransportManager
 import timber.log.Timber
 
 /**
  * Activity for viewing live camera feed from target device.
  * Displays H.264 decoded video stream and plays audio.
+ * 
+ * Supports two transport modes:
+ * 1. TCP - Same network (fast, tried first)
+ * 2. WebRTC DataChannel - Cross-network (automatic fallback)
+ * 
+ * All received data is decrypted using AES-256-GCM via Rust bridge.
  */
 class LiveCameraActivity : AppCompatActivity() {
 
     private lateinit var surfaceView: SurfaceView
     private var mediaDecoder: MediaCodecDecoder? = null
     private var audioPlayer: AudioPlayer? = null
-    private var tcpClient: TcpClientManager? = null
+    private var transportManager: TransportManager? = null
 
     companion object {
         const val EXTRA_TARGET_IP = "target_ip"
+        const val EXTRA_USE_WEBRTC = "use_webrtc"
+        
+        // Must match the key used by Target
+        val ENCRYPTION_KEY = ByteArray(32) { 0x42 } // TODO: Use secure key exchange
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -58,11 +69,38 @@ class LiveCameraActivity : AppCompatActivity() {
             start()
         }
         
-        // Get TCP client from application or create new connection
-        // For now, we'll get the IP from intent and connect
+        // Get connection parameters
         val targetIp = intent.getStringExtra(EXTRA_TARGET_IP)
+        val useWebRtcOnly = intent.getBooleanExtra(EXTRA_USE_WEBRTC, false)
+        
+        // Initialize transport manager
+        transportManager = TransportManager(this, lifecycleScope).apply {
+            onConnectionStateChanged = { state ->
+                Timber.i("Connection state changed: $state")
+                // Could update UI here to show connection status
+            }
+            
+            onDataReceived = { encryptedData ->
+                // Decrypt → demux → route (handles both video and audio)
+                processReceivedData(encryptedData)
+            }
+            
+            onSignalingData = { signalingData ->
+                // WebRTC signaling data (SDP/ICE) to display as QR
+                Timber.d("WebRTC signaling data: $signalingData")
+                // TODO: Display as QR code for Target to scan
+            }
+        }
+        
+        // Connect to target
         if (targetIp != null) {
-            connectToTarget(targetIp)
+            if (useWebRtcOnly) {
+                Timber.i("Connecting via WebRTC only (cross-network)")
+                transportManager?.connectWebRtcOnly()
+            } else {
+                Timber.i("Connecting to $targetIp (TCP first, WebRTC fallback)")
+                transportManager?.connect(targetIp)
+            }
         }
     }
 
@@ -71,8 +109,8 @@ class LiveCameraActivity : AppCompatActivity() {
         stopDecoder()
         audioPlayer?.stop()
         audioPlayer = null
-        tcpClient?.disconnect()
-        tcpClient = null
+        transportManager?.dispose()
+        transportManager = null
     }
 
     private fun startDecoder(holder: SurfaceHolder) {
@@ -93,25 +131,46 @@ class LiveCameraActivity : AppCompatActivity() {
         mediaDecoder?.stop()
         mediaDecoder = null
     }
-
-    private fun connectToTarget(ip: String) {
-        // Create TCP client and set up callbacks
-        tcpClient = TcpClientManager(lifecycleScope).apply {
-            onFrameReceived = { payload ->
-                // Feed demuxed video frames to decoder
-                feedFrame(payload)
+    
+    /**
+     * Process received encrypted data: decrypt → demux → route by type.
+     * Unified handling for both TCP and WebRTC transports.
+     */
+    private fun processReceivedData(encryptedData: ByteArray) {
+        try {
+            // Step 1: Decrypt
+            val decrypted = RustBridge.nativeDecryptPacket(encryptedData, ENCRYPTION_KEY)
+            if (decrypted == null) {
+                Timber.w("Failed to decrypt data")
+                return
             }
-            onAudioReceived = { payload ->
-                // Play demuxed audio
-                playAudio(payload)
+            
+            // Step 2: Demux (extract payloads from [type][timestamp][len][payload][auth])
+            val payloads = RustBridge.nativeDemuxPacket(decrypted)
+            if (payloads == null || payloads.isEmpty()) {
+                return
             }
-            connect(ip)
+            
+            // Step 3: Route by type
+            payloads.forEach { payloadWithType ->
+                if (payloadWithType.size < 1) return@forEach
+                
+                val type = payloadWithType[0].toInt() and 0xFF
+                val payload = payloadWithType.copyOfRange(1, payloadWithType.size)
+                
+                when (type) {
+                    0x01 -> feedFrame(payload)   // Video
+                    0x02 -> playAudio(payload)   // Audio
+                    else -> Timber.w("Unknown payload type: 0x${type.toString(16)}")
+                }
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Error processing received data")
         }
     }
 
     /**
      * Feed a decoded frame to the video decoder.
-     * Called by TcpClientManager after demuxing (type 0x01).
      */
     fun feedFrame(encodedBytes: ByteArray) {
         if (encodedBytes.isEmpty()) return
@@ -125,7 +184,6 @@ class LiveCameraActivity : AppCompatActivity() {
 
     /**
      * Play raw PCM audio.
-     * Called by TcpClientManager after demuxing (type 0x02).
      */
     fun playAudio(audioBytes: ByteArray) {
         if (audioBytes.isEmpty()) return
@@ -138,9 +196,30 @@ class LiveCameraActivity : AppCompatActivity() {
     }
 
     /**
+     * Set WebRTC answer from scanned QR code.
+     */
+    fun setWebRtcAnswer(answerSdp: String) {
+        transportManager?.setWebRtcAnswer(answerSdp)
+    }
+    
+    /**
+     * Add ICE candidate from scanned QR.
+     */
+    fun addIceCandidate(candidateJson: String) {
+        transportManager?.addWebRtcIceCandidate(candidateJson)
+    }
+
+    /**
      * Check if the decoder is ready to receive frames.
      */
     fun isReady(): Boolean {
         return mediaDecoder != null
+    }
+    
+    /**
+     * Get current connection state.
+     */
+    fun getConnectionState(): TransportManager.ConnectionState {
+        return transportManager?.connectionState ?: TransportManager.ConnectionState.DISCONNECTED
     }
 }

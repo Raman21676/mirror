@@ -17,13 +17,22 @@ import com.mirror.target.audio.AudioCaptureManager
 import com.mirror.target.camera.CameraCaptureManager
 import com.mirror.target.core.RustBridge
 import com.mirror.target.encoder.MediaCodecEncoder
-import com.mirror.target.network.TcpServerManager
+import com.mirror.target.network.TransportManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import timber.log.Timber
 
+/**
+ * Mirror Target Service - Streams camera and audio to Host app.
+ * 
+ * Supports two transports:
+ * 1. TCP - Same network (fast, zero overhead)
+ * 2. WebRTC DataChannel - Cross-network (automatic fallback)
+ * 
+ * All data is encrypted with AES-256-GCM via Rust bridge.
+ */
 class MirrorTargetService : Service() {
 
     companion object {
@@ -35,13 +44,16 @@ class MirrorTargetService : Service() {
         @Volatile
         var isRunning = false
             private set
+            
+        // 32-byte AES-256 key (in production, generate and exchange securely)
+        val ENCRYPTION_KEY = ByteArray(32) { 0x42 } // TODO: Use secure key exchange
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var wakeLock: PowerManager.WakeLock
     private lateinit var cameraManager: CameraCaptureManager
     private lateinit var audioManager: AudioCaptureManager
-    private lateinit var tcpServer: TcpServerManager
+    private lateinit var transportManager: TransportManager
     private lateinit var videoEncoder: MediaCodecEncoder
 
     override fun onCreate() {
@@ -54,7 +66,7 @@ class MirrorTargetService : Service() {
         
         cameraManager = CameraCaptureManager(this)
         audioManager = AudioCaptureManager(this)
-        tcpServer = TcpServerManager(serviceScope)
+        transportManager = TransportManager(this, serviceScope)
         videoEncoder = MediaCodecEncoder(
             width = CameraCaptureManager.WIDTH,
             height = CameraCaptureManager.HEIGHT,
@@ -67,47 +79,80 @@ class MirrorTargetService : Service() {
             videoEncoder.encodeFrame(nv21Frame)
         }
         
-        // Wire encoder -> mux -> TCP
+        // Wire encoder -> mux -> encrypt -> transport
         videoEncoder.onEncodedFrame = { encodedFrame, isCodecConfig ->
-            // Mux the encoded frame (type 0x01 = Video)
-            val muxed = RustBridge.nativeMuxPacket(0x01, encodedFrame)
-            if (muxed != null) {
-                // Send to connected client (skip encryption for now)
-                val sent = tcpServer.sendToClient(muxed)
-                if (sent) {
-                    if (isCodecConfig) {
-                        Timber.i("Sent codec config: ${muxed.size} bytes")
-                    } else {
-                        Timber.v("Sent video frame: ${muxed.size} bytes")
-                    }
-                }
-            } else {
-                Timber.w("Mux failed for ${encodedFrame.size} byte frame")
-            }
+            sendVideoFrame(encodedFrame, isCodecConfig)
         }
         
-        // When a new client connects, send codec config first
-        tcpServer.onClientConnected = {
+        // When client connects, send codec config
+        transportManager.onClientConnected = { transportType ->
+            Timber.i("Client connected via $transportType")
             val codecConfig = videoEncoder.codecConfig
             if (codecConfig != null) {
-                Timber.i("New client connected, sending codec config first")
-                val muxed = RustBridge.nativeMuxPacket(0x01, codecConfig)
-                if (muxed != null) {
-                    tcpServer.sendToClient(muxed)
-                }
+                Timber.i("Sending codec config to new client")
+                sendVideoFrame(codecConfig, true)
             }
         }
         
-        // Wire audio -> mux -> TCP (type 0x02 = Audio)
+        transportManager.onClientDisconnected = {
+            Timber.i("Client disconnected")
+        }
+        
+        // Wire audio -> mux -> encrypt -> transport
         audioManager.onAudioData = { audioBytes ->
-            val muxed = RustBridge.nativeMuxPacket(0x02, audioBytes)
-            if (muxed != null) {
-                tcpServer.sendToClient(muxed)
-                Timber.v("Sent audio: ${muxed.size} bytes (${audioBytes.size} raw)")
-            }
+            sendAudioData(audioBytes)
         }
         
         createNotificationChannel()
+    }
+    
+    private fun sendVideoFrame(frameData: ByteArray, isCodecConfig: Boolean) {
+        try {
+            // Mux the frame (type 0x01 = Video)
+            val muxed = RustBridge.nativeMuxPacket(0x01, frameData)
+            if (muxed == null) {
+                Timber.w("Mux failed for video frame")
+                return
+            }
+            
+            // Encrypt with AES-256-GCM
+            val encrypted = RustBridge.nativeEncryptPacket(muxed, ENCRYPTION_KEY)
+            if (encrypted == null) {
+                Timber.w("Encryption failed for video frame")
+                return
+            }
+            
+            // Send via active transport
+            val sent = transportManager.send(encrypted)
+            if (sent && isCodecConfig) {
+                Timber.i("Sent codec config: ${encrypted.size} bytes (encrypted)")
+            }
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to send video frame")
+        }
+    }
+    
+    private fun sendAudioData(audioBytes: ByteArray) {
+        try {
+            // Mux the audio (type 0x02 = Audio)
+            val muxed = RustBridge.nativeMuxPacket(0x02, audioBytes)
+            if (muxed == null) {
+                Timber.w("Mux failed for audio")
+                return
+            }
+            
+            // Encrypt with AES-256-GCM
+            val encrypted = RustBridge.nativeEncryptPacket(muxed, ENCRYPTION_KEY)
+            if (encrypted == null) {
+                Timber.w("Encryption failed for audio")
+                return
+            }
+            
+            // Send via active transport
+            transportManager.send(encrypted)
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to send audio data")
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -128,19 +173,48 @@ class MirrorTargetService : Service() {
         try {
             // Start encoder first (before camera starts feeding it)
             videoEncoder.start()
-            // Start TCP server
-            tcpServer.startServer()
+            // Start transport manager (TCP server + WebRTC ready)
+            transportManager.start()
             // Start camera (will feed encoder)
             cameraManager.startCapture()
-            // Start audio (not wired yet, but keep it running)
+            // Start audio
             audioManager.startCapture()
             
             isRunning = true
-            Timber.i("Service started - camera streaming to TCP")
+            Timber.i("Service started - camera streaming active")
         } catch (e: Exception) {
             Timber.e(e, "Failed to start")
             stopSelf()
         }
+    }
+    
+    /**
+     * Initialize WebRTC for cross-network connections.
+     * Call this from UI when user enables "Cross-network mode".
+     */
+    fun initializeWebRtc() {
+        transportManager.initializeWebRtc()
+    }
+    
+    /**
+     * Set WebRTC offer from scanned QR code.
+     */
+    fun setWebRtcOffer(offerSdp: String) {
+        transportManager.createWebRtcAnswer(offerSdp)
+    }
+    
+    /**
+     * Add ICE candidate from scanned QR.
+     */
+    fun addIceCandidate(candidateJson: String) {
+        transportManager.addWebRtcIceCandidate(candidateJson)
+    }
+    
+    /**
+     * Get current signaling data to display as QR.
+     */
+    fun setSignalingCallback(callback: (String) -> Unit) {
+        transportManager.onSignalingData = callback
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -151,7 +225,7 @@ class MirrorTargetService : Service() {
         cameraManager.stopCapture()
         audioManager.stopCapture()
         videoEncoder.stop()
-        tcpServer.stopServer()
+        transportManager.stop()
         if (wakeLock.isHeld) wakeLock.release()
         serviceScope.cancel()
         Timber.i("Service stopped")

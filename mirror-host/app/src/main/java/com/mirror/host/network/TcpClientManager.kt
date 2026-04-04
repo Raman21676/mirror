@@ -82,7 +82,7 @@ class TcpClientManager(
             val input = sock.getInputStream()
             val lengthBuffer = ByteArray(4)
 
-            while (isActive && sock.isConnected && !sock.isClosed) {
+            while (kotlin.coroutines.coroutineContext.isActive && sock.isConnected && !sock.isClosed) {
                 // Read 4-byte length header
                 if (!readFully(input, lengthBuffer)) {
                     Timber.i("Connection closed while reading length")
@@ -112,7 +112,7 @@ class TcpClientManager(
                 onDataReceived?.invoke(dataBuffer)
             }
         } catch (e: IOException) {
-            if (isActive) Timber.e(e, "Receive error")
+            if (kotlin.coroutines.coroutineContext.isActive) Timber.e(e, "Receive error")
         } finally {
             cleanupConnection()
         }
@@ -133,32 +133,13 @@ class TcpClientManager(
     }
 
     private fun processReceivedData(data: ByteArray) {
-        // Pass through Rust demux and extract payloads
-        // Format: [type (1 byte)][payload (N bytes)]
+        // Pass raw encrypted data to callback.
+        // The consumer (LiveCameraActivity) will: decrypt → demux → route by type
+        // This unifies the data flow with WebRTC which also delivers raw encrypted bytes.
         try {
-            val payloads = RustBridge.nativeDemuxPacket(data)
-            if (payloads != null && payloads.isNotEmpty()) {
-                Timber.d("Demuxed ${payloads.size} payload(s)")
-                payloads.forEachIndexed { index, payloadWithType ->
-                    if (payloadWithType.size < 1) return@forEachIndexed
-                    
-                    val type = payloadWithType[0].toInt() and 0xFF
-                    val payload = payloadWithType.copyOfRange(1, payloadWithType.size)
-                    
-                    Timber.d("  Payload $index: type=0x${type.toString(16)}, ${payload.size} bytes")
-                    
-                    // Route based on type: 0x01 = Video, 0x02 = Audio
-                    when (type) {
-                        0x01 -> onFrameReceived?.invoke(payload)   // Video
-                        0x02 -> onAudioReceived?.invoke(payload)  // Audio
-                        else -> Timber.w("Unknown payload type: 0x${type.toString(16)}")
-                    }
-                }
-            } else {
-                Timber.d("No complete payloads yet (buffered ${data.size} bytes)")
-            }
+            onDataReceived?.invoke(data)
         } catch (e: Exception) {
-            Timber.e(e, "Demux error")
+            Timber.e(e, "Error processing received data")
         }
     }
 

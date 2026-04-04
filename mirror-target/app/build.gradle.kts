@@ -46,6 +46,7 @@ android {
     }
     
     buildFeatures {
+        buildConfig = true
         viewBinding = true
     }
     
@@ -60,8 +61,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     
-    // WebRTC
-    implementation("org.webrtc:google-webrtc:1.0.32006")
+    // WebRTC - Stream's fork which is actively maintained
+    implementation("io.getstream:stream-webrtc-android:1.1.1")
     
     // QR Code scanning
     implementation("com.journeyapps:zxing-android-embedded:4.3.0")
@@ -69,6 +70,9 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+    
+    // Google Play Services
+    implementation("com.google.android.gms:play-services-location:21.1.0")
     
     // Logging
     implementation("com.jakewharton.timber:timber:5.0.1")

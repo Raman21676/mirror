@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Mirror Target</string>
+    <string name="app_name">Mirror Me</string>
     <string name="start">Start</string>
     <string name="stop">Stop</string>
     <string name="pair">Pair Device</string>

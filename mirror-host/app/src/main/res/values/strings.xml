@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Mirror Host</string>
+    <string name="app_name">Mirror</string>
     <string name="title_devices">Devices</string>
     <string name="title_live">Live</string>
     <string name="title_map">Map</string>

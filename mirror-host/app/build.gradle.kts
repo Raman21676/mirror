@@ -38,6 +38,7 @@ android {
     }
     
     buildFeatures {
+        buildConfig = true
         viewBinding = true
     }
 }
@@ -56,8 +57,8 @@ dependencies {
     implementation("com.google.android.gms:play-services-maps:18.2.0")
     implementation("com.google.android.gms:play-services-location:21.1.0")
     
-    // WebRTC
-    implementation("org.webrtc:google-webrtc:1.0.32006")
+    // WebRTC - Stream's fork which is actively maintained
+    implementation("io.getstream:stream-webrtc-android:1.1.1")
     
     // ExoPlayer for video
     implementation("androidx.media3:media3-exoplayer:1.2.1")

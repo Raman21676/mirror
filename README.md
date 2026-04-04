@@ -1,64 +1,59 @@
-# Mirror - Android Surveillance App
+# Mirror - Android Surveillance System
 
-Transform your old Android phone into a CCTV camera, GPS tracker, and remote monitoring device.
+Transform your old Android phone into a CCTV camera with live streaming.
 
-## Overview
+## 📱 Two Apps
 
-**Mirror** consists of two Android apps:
+| App | Install On | Purpose | Icon |
+|-----|-----------|---------|------|
+| **Mirror** | Your main phone | View/Control the camera | 🔵 Blue |
+| **Mirror Me** | Old phone (CCTV) | Stream camera & audio | 🟢 Green |
 
-- **Mirror Target** - Runs on the old phone, acts as CCTV server
-- **Mirror Host** - User's main phone for remote monitoring
+## ✨ Features
 
-## Features
+- **Live Video** - H.264 encoded camera streaming
+- **Live Audio** - Real-time microphone streaming  
+- **GPS Tracking** - Location sharing on map
+- **Cross-Network** - Works on same WiFi or different networks via WebRTC
+- **Encrypted** - AES-256-GCM end-to-end encryption
 
-1. **Camera Surveillance** - Front/back camera streaming with screen-off recording
-2. **Audio Monitoring** - Live microphone access with recording
-3. **GPS Tracking** - Real-time location tracking with geofencing
-4. **Screen Mirroring** - View target device screen live (useful for theft recovery)
-5. **Remote Gallery** - Browse and download photos/videos from target device
+## 🚀 Quick Start
 
-## Tech Stack
+### Same WiFi (Fastest)
+1. Install **Mirror Me** on old phone → Tap "Start"
+2. Note the IP address shown
+3. Install **Mirror** on your phone → Enter IP → Connect
 
-- **Languages**: Rust (NDK) + Kotlin
-- **Video**: H.264 encoding via MediaCodec
-- **Audio**: Opus codec
-- **Networking**: WebRTC P2P with STUN/TURN fallback
-- **Encryption**: AES-256-GCM with X25519 key exchange
+### Different Networks
+1. Both phones need internet
+2. **Mirror** app → "Connect via WebRTC"
+3. Scan QR codes between devices
+4. Direct P2P connection established!
 
-## Project Structure
+## 🏗️ Build
+
+```bash
+# Build Mirror (Host)
+cd mirror-host && ./gradlew assembleDebug
+
+# Build Mirror Me (Target)
+cd mirror-target && ./gradlew assembleDebug
+```
+
+## 📂 Project Structure
 
 ```
 mirror/
-├── mirror-target/     # Target app (CCTV server)
-├── mirror-host/       # Host app (remote client)
-├── mirror-core/       # Shared Rust library
-├── mirror-signaling/  # Optional signaling server
-└── docs/              # Documentation
+├── mirror-host/       # Mirror app (viewer)
+├── mirror-target/     # Mirror Me app (camera)
+├── mirror-core/       # Rust crypto library
+└── mirror-final/      # Built APKs
 ```
 
-## Quick Start
+## 📄 License
 
-### Prerequisites
+MIT License - See [LICENSE](LICENSE) file
 
-- Android Studio Arctic Fox or later
-- Android NDK r25c or later
-- Rust toolchain with Android targets
+---
 
-### Build
-
-```bash
-# Build Rust core
-cd mirror-core
-cargo ndk -t arm64-v8a -t armeabi-v7a -o ../mirror-target/app/src/main/jniLibs build
-
-# Build Android apps
-cd mirror-target
-./gradlew assembleDebug
-
-cd mirror-host
-./gradlew assembleDebug
-```
-
-## License
-
-MIT License - See LICENSE file for details
+Made with ❤️ for privacy-focused home surveillance
