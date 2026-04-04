@@ -6,18 +6,20 @@ import android.view.SurfaceView
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.mirror.host.audio.AudioPlayer
 import com.mirror.host.decoder.MediaCodecDecoder
 import com.mirror.host.network.TcpClientManager
 import timber.log.Timber
 
 /**
  * Activity for viewing live camera feed from target device.
- * Displays H.264 decoded video stream.
+ * Displays H.264 decoded video stream and plays audio.
  */
 class LiveCameraActivity : AppCompatActivity() {
 
     private lateinit var surfaceView: SurfaceView
     private var mediaDecoder: MediaCodecDecoder? = null
+    private var audioPlayer: AudioPlayer? = null
     private var tcpClient: TcpClientManager? = null
 
     companion object {
@@ -51,6 +53,11 @@ class LiveCameraActivity : AppCompatActivity() {
         
         setContentView(surfaceView)
         
+        // Start audio player
+        audioPlayer = AudioPlayer().apply {
+            start()
+        }
+        
         // Get TCP client from application or create new connection
         // For now, we'll get the IP from intent and connect
         val targetIp = intent.getStringExtra(EXTRA_TARGET_IP)
@@ -62,6 +69,8 @@ class LiveCameraActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         stopDecoder()
+        audioPlayer?.stop()
+        audioPlayer = null
         tcpClient?.disconnect()
         tcpClient = null
     }
@@ -86,11 +95,15 @@ class LiveCameraActivity : AppCompatActivity() {
     }
 
     private fun connectToTarget(ip: String) {
-        // Create TCP client and set up frame callback
+        // Create TCP client and set up callbacks
         tcpClient = TcpClientManager(lifecycleScope).apply {
             onFrameReceived = { payload ->
                 // Feed demuxed video frames to decoder
                 feedFrame(payload)
+            }
+            onAudioReceived = { payload ->
+                // Play demuxed audio
+                playAudio(payload)
             }
             connect(ip)
         }
@@ -98,7 +111,7 @@ class LiveCameraActivity : AppCompatActivity() {
 
     /**
      * Feed a decoded frame to the video decoder.
-     * Called by TcpClientManager after demuxing.
+     * Called by TcpClientManager after demuxing (type 0x01).
      */
     fun feedFrame(encodedBytes: ByteArray) {
         if (encodedBytes.isEmpty()) return
@@ -107,6 +120,20 @@ class LiveCameraActivity : AppCompatActivity() {
             mediaDecoder?.decodeFrame(encodedBytes)
         } catch (e: Exception) {
             Timber.e(e, "Error feeding frame")
+        }
+    }
+
+    /**
+     * Play raw PCM audio.
+     * Called by TcpClientManager after demuxing (type 0x02).
+     */
+    fun playAudio(audioBytes: ByteArray) {
+        if (audioBytes.isEmpty()) return
+        
+        try {
+            audioPlayer?.play(audioBytes)
+        } catch (e: Exception) {
+            Timber.e(e, "Error playing audio")
         }
     }
 

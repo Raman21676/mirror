@@ -98,6 +98,15 @@ class MirrorTargetService : Service() {
             }
         }
         
+        // Wire audio -> mux -> TCP (type 0x02 = Audio)
+        audioManager.onAudioData = { audioBytes ->
+            val muxed = RustBridge.nativeMuxPacket(0x02, audioBytes)
+            if (muxed != null) {
+                tcpServer.sendToClient(muxed)
+                Timber.v("Sent audio: ${muxed.size} bytes (${audioBytes.size} raw)")
+            }
+        }
+        
         createNotificationChannel()
     }
 
