@@ -12,4 +12,5 @@ object RustBridge {
     external fun nativeDecryptPacket(data: ByteArray, key: ByteArray): ByteArray?
     external fun nativeMuxPacket(type: Int, payload: ByteArray): ByteArray?
     external fun nativeDemuxPacket(data: ByteArray): Array<ByteArray>?
+    external fun nativeClearDemux()
 }

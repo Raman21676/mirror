@@ -135,6 +135,17 @@ pub extern "C" fn Java_com_mirror_core_RustBridge_nativeMuxPacket(
     }
 }
 
+/// Clear the global demux buffer. Call this when a new connection starts.
+#[no_mangle]
+pub extern "C" fn Java_com_mirror_core_RustBridge_nativeClearDemux(
+    mut _env: JNIEnv,
+    _class: JClass,
+) {
+    let mut demux = GLOBAL_DEMUX.lock().unwrap();
+    demux.clear();
+    info!("Demux buffer cleared");
+}
+
 /// Demux raw bytes into individual payloads.
 /// Returns an array of ByteArray payloads. May return empty array if no full packet is available.
 #[no_mangle]

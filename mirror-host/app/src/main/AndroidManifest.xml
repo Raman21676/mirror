@@ -6,7 +6,6 @@
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" 
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
@@ -37,6 +36,7 @@
         <activity android:name=".screen.ScreenMirrorActivity" />
         <activity android:name=".gallery.GalleryBrowserActivity" />
         <activity android:name=".pairing.DevicePairingActivity" />
+        <activity android:name=".settings.SettingsActivity" />
 
         <meta-data
             android:name="com.google.android.geo.API_KEY"

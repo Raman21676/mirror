@@ -28,6 +28,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private lateinit var statusTextView: TextView
+    private lateinit var ipTextView: TextView
     private lateinit var startButton: Button
     private lateinit var stopButton: Button
     private lateinit var pairButton: Button
@@ -49,6 +50,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun initViews() {
         statusTextView = findViewById(R.id.status_text)
+        ipTextView = findViewById(R.id.ip_text)
+        ipTextView.text = "IP: ${getWifiIpAddress() ?: "Unknown"}"
         startButton = findViewById(R.id.start_button)
         stopButton = findViewById(R.id.stop_button)
         pairButton = findViewById(R.id.pair_button)
@@ -118,6 +121,24 @@ class MainActivity : AppCompatActivity() {
 
     private fun openSettings() {
         startActivity(Intent(this, SetupActivity::class.java))
+    }
+
+    private fun getWifiIpAddress(): String? {
+        return try {
+            val wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as android.net.wifi.WifiManager
+            val ipInt = wifiManager.connectionInfo.ipAddress
+            if (ipInt == 0) return null
+            String.format(
+                "%d.%d.%d.%d",
+                ipInt and 0xFF,
+                ipInt shr 8 and 0xFF,
+                ipInt shr 16 and 0xFF,
+                ipInt shr 24 and 0xFF
+            )
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to get WiFi IP")
+            null
+        }
     }
 
     private fun updateStatus() {

@@ -144,13 +144,22 @@ class TcpClientManager(
     }
 
     /**
-     * Send data to the Target (for future use: control commands, etc.)
+     * Send data to the Target with 4-byte big-endian length prefix.
+     * Format: [length (4 bytes)][data]
      */
     fun send(data: ByteArray): Boolean {
         val sock = socket ?: return false
         return try {
-            sock.getOutputStream().write(data)
-            sock.getOutputStream().flush()
+            val output = sock.getOutputStream()
+            val lengthHeader = ByteArray(4).apply {
+                this[0] = (data.size shr 24).toByte()
+                this[1] = (data.size shr 16).toByte()
+                this[2] = (data.size shr 8).toByte()
+                this[3] = data.size.toByte()
+            }
+            output.write(lengthHeader)
+            output.write(data)
+            output.flush()
             Timber.d("Sent ${data.size} bytes to Target")
             true
         } catch (e: IOException) {

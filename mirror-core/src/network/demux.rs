@@ -18,6 +18,11 @@ impl StreamDemux {
     pub fn feed(&mut self, data: &[u8]) {
         self.buffer.extend_from_slice(data);
     }
+
+    /// Clear the internal buffer
+    pub fn clear(&mut self) {
+        self.buffer.clear();
+    }
     
     /// Try to extract a packet from the buffer
     pub fn demux(&mut self) -> Result<Option<MuxPacket>, NetworkError> {
